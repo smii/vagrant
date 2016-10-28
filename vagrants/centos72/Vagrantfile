@@ -1,0 +1,70 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Vagrantfile API/syntax version. Don't touch unless you know what you're doing!
+VAGRANTFILE_API_VERSION = "2"
+
+POTENTIAL_PUPPET_LOCATIONS = ['../../../puppet', '../sysops/puppet']
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+  config.vm.box = "enterprisemodules/centos-7.2-x86_64-puppet "
+  config.vm.communicator = "ssh"
+
+  config.vm.define "centos72-base", primary: true do |centos7|
+    config.vm.host_name = "centos72"
+    config.vm.network "private_network", ip: "192.168.193.12"
+    config.vm.network :forwarded_port, host: 2222, guest: 22, id: "ssh", auto_correct: true
+
+   # config.vbguest.auto_update = false
+  end
+#  config.vm.define "batch" do |batch|
+#    config.vm.host_name = "eframe-batch"
+#    config.vm.network "private_network", ip: "192.168.193.20"
+#  end
+
+  # The url from where the 'config.vm.box' box will be fetched if it
+  # doesn't already exist on the user's system.
+  # config.vm.box_url = "http://developer.nrel.gov/downloads/vagrant-boxes/CentOS-6.4-x86_64-v20130731.box"
+
+  # configure vm
+  config.vm.provider :virtualbox do |vb|
+    # Don't boot with headless mode
+    vb.gui = false
+    ##vb.gui = true
+  
+    # Use VBoxManage to customize the VM. For example to change memory:
+    vb.customize ["modifyvm", :id, "--memory", "2048"]
+  end
+  
+  # Provision box
+  def discover_puppet_dir
+    POTENTIAL_PUPPET_LOCATIONS.each do |dir|
+      if File.exists? dir
+        if File.exists? "#{dir}/thirdparty"
+          return dir
+        else
+          STDERR.puts "Found unitialized puppet checkout at: #{dir}."
+          STDERR.puts "Please use r10k, or bin/update_dependencies to initialize the puppet module repository for local use."
+          exit! 2
+        end
+      end
+    end
+    STDERR.puts "Could not find puppet checkout!"
+    STDERR.puts "For the vagrant provisioning to work, it has to be configured as a relative directory to this Vagrantfile."
+    STDERR.puts "POTENTIAL_PUPPET_LOCATIONS = #{POTENTIAL_PUPPET_LOCATIONS}" # Can be configured.
+    exit! 1
+  end
+  config.vm.provision :puppet do |puppet|
+    puppet.options = "--parser future --verbose --debug --hiera_config /tmp/vagrant-puppet/manifests/hiera.yaml"
+	puppet.working_directory = "/tmp/vagrant-puppet"
+    puppet.manifests_path    = "../../manifests/"
+	puppet.hiera_config_path = "../../hiera.yaml"
+	config.vm.synced_folder("../../hieradata", "/tmp/vagrant-puppet/hieradata")
+    puppet.manifest_file     = "site.pp"
+    puppet.module_path       = ["../../modules/"]    # shared modules
+    puppet.working_directory = "/tmp/vagrant-puppet" # default hiera path
+    puppet_dir = discover_puppet_dir
+    puppet.module_path = ["#{puppet_dir}/modules", "#{puppet_dir}/thirdparty"]
+  end
+end

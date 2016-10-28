@@ -1,0 +1,3 @@
+---
+sf_base_server::project: WIN2k8-SFBASEBOX
+sf_base_server::deployment_stage: "vagrant"
